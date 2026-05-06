@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AdmissãoDP — Gestão de Admissões</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;1,9..144,300&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --verde:#00C896;--verde-dim:rgba(0,200,150,0.1);--verde-b:rgba(0,200,150,0.25);
+  --preto:#080F0C;--card:#111A16;--card2:#162019;--borda:rgba(255,255,255,0.07);
+  --texto:#F5FBF8;--sub:#7A9E94;--danger:#FF6B6B;--warn:#FFB347;--info:#60A5FA;
+  --serif:"Fraunces",serif;--sans:"DM Sans",sans-serif;
+}
+html{scroll-behavior:smooth}
+body{background:var(--preto);color:var(--texto);font-family:var(--sans);font-size:15px;min-height:100vh}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:linear-gradient(rgba(0,200,150,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,150,0.025) 1px,transparent 1px);
+  background-size:48px 48px}
+
+/* ── LAYOUT ── */
+.shell{position:relative;z-index:1;display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+
+/* ── SIDEBAR ── */
+.sidebar{background:var(--card);border-right:1px solid var(--borda);padding:1.5rem 0;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+.logo{padding:0 1.25rem 1.5rem;border-bottom:1px solid var(--borda)}
+.logo-title{font-family:var(--serif);font-size:1.2rem;font-weight:300;color:var(--texto)}
+.logo-title em{font-style:italic;color:var(--verde)}
+.logo-sub{font-size:11px;color:var(--sub);margin-top:2px}
+.nav{flex:1;padding:1rem 0}
+.nav-section{font-size:10px;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;color:var(--sub);padding:0.5rem 1.25rem;margin-top:0.5rem}
+.nav-item{display:flex;align-items:center;gap:10px;padding:0.6rem 1.25rem;font-size:13px;color:var(--sub);cursor:pointer;transition:all 0.15s;border-left:2px solid transparent}
+.nav-item:hover{color:var(--texto);background:var(--card2)}
+.nav-item.active{color:var(--verde);background:var(--verde-dim);border-left-color:var(--verde)}
+.nav-icon{width:16px;text-align:center;font-size:14px}
+.sidebar-footer{padding:1rem 1.25rem;border-top:1px solid var(--borda)}
+.tenant-info{font-size:11px;color:var(--sub)}
+.tenant-name{font-size:13px;font-weight:500;color:var(--texto)}
+
+/* ── MAIN ── */
+.main{padding:2rem;overflow-x:hidden}
+.page{display:none}.page.active{display:block}
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:2rem;gap:1rem;flex-wrap:wrap}
+.page-title{font-family:var(--serif);font-size:1.8rem;font-weight:300}
+.page-title em{font-style:italic;color:var(--verde)}
+
+/* ── STATS ── */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-bottom:2rem}
+.stat-card{background:var(--card);border:1px solid var(--borda);border-radius:12px;padding:1.25rem}
+.stat-val{font-family:var(--serif);font-size:2rem;font-weight:300;color:var(--verde);line-height:1}
+.stat-label{font-size:12px;color:var(--sub);margin-top:4px}
+
+/* ── TABELA ── */
+.table-wrap{background:var(--card);border:1px solid var(--borda);border-radius:12px;overflow:hidden}
+.table-head{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:1px solid var(--borda);gap:1rem;flex-wrap:wrap}
+.table-title{font-size:14px;font-weight:500}
+.search-box{display:flex;align-items:center;gap:8px;background:var(--card2);border:1px solid var(--borda);border-radius:8px;padding:6px 12px}
+.search-box input{background:none;border:none;color:var(--texto);font-size:13px;font-family:var(--sans);outline:none;width:200px}
+.search-box input::placeholder{color:var(--sub)}
+table{width:100%;border-collapse:collapse}
+th{font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--sub);padding:10px 16px;text-align:left;border-bottom:1px solid var(--borda)}
+td{padding:12px 16px;font-size:13px;border-bottom:1px solid rgba(255,255,255,0.04)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--card2)}
+.td-nome{font-weight:500;color:var(--texto)}
+.td-sub{font-size:12px;color:var(--sub)}
+
+/* ── STATUS BADGES ── */
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;padding:3px 10px;border-radius:100px}
+.badge::before{content:"";width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.badge-pend{background:rgba(122,158,148,0.12);color:var(--sub)}.badge-pend::before{background:var(--sub)}
+.badge-and{background:rgba(255,179,71,0.12);color:var(--warn)}.badge-and::before{background:var(--warn)}
+.badge-ok{background:var(--verde-dim);color:var(--verde)}.badge-ok::before{background:var(--verde)}
+.badge-rej{background:rgba(255,107,107,0.12);color:var(--danger)}.badge-rej::before{background:var(--danger)}
+
+/* ── BOTÕES ── */
+.btn{padding:8px 18px;border-radius:100px;font-family:var(--sans);font-size:13px;font-weight:500;cursor:pointer;transition:all 0.2s;border:none;white-space:nowrap}
+.btn-primary{background:var(--verde);color:var(--preto)}.btn-primary:hover{opacity:0.88}
+.btn-ghost{background:transparent;color:var(--sub);border:1px solid var(--borda)}.btn-ghost:hover{border-color:var(--verde-b);color:var(--texto)}
+.btn-danger{background:rgba(255,107,107,0.12);color:var(--danger);border:1px solid rgba(255,107,107,0.2)}.btn-danger:hover{background:rgba(255,107,107,0.2)}
+.btn-sm{padding:5px 12px;font-size:12px}
+.btn-icon{display:inline-flex;align-items:center;gap:6px}
+
+/* ── MODAL ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(8,15,12,0.85);z-index:100;display:none;align-items:center;justify-content:center;padding:1rem}
+.modal-overlay.open{display:flex}
+.modal{background:var(--card);border:1px solid var(--borda);border-radius:16px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:1.25rem 1.5rem;border-bottom:1px solid var(--borda)}
+.modal-title{font-family:var(--serif);font-size:1.2rem;font-weight:300}
+.modal-close{background:none;border:none;color:var(--sub);font-size:18px;cursor:pointer;padding:4px;line-height:1}
+.modal-close:hover{color:var(--texto)}
+.modal-body{padding:1.5rem}
+.modal-footer{padding:1rem 1.5rem;border-top:1px solid var(--borda);display:flex;justify-content:flex-end;gap:10px}
+
+/* ── FORM ── */
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
+.form-group{display:flex;flex-direction:column;gap:6px;margin-bottom:1rem}
+.form-group label{font-size:12px;font-weight:500;color:var(--sub);letter-spacing:0.05em}
+.form-control{background:var(--card2);border:1px solid var(--borda);border-radius:8px;padding:9px 12px;color:var(--texto);font-size:13px;font-family:var(--sans);outline:none;transition:border-color 0.2s;width:100%}
+.form-control:focus{border-color:var(--verde-b)}
+.form-control::placeholder{color:var(--sub)}
+select.form-control option{background:var(--card)}
+.form-hint{font-size:11px;color:var(--sub);margin-top:3px}
+
+/* ── CHECKLIST DETALHE ── */
+.processo-header{background:var(--card);border:1px solid var(--borda);border-radius:12px;padding:1.5rem;margin-bottom:1.5rem}
+.ph-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-top:1rem}
+.ph-item{}
+.ph-label{font-size:11px;color:var(--sub);letter-spacing:0.05em;text-transform:uppercase}
+.ph-val{font-size:14px;color:var(--texto);margin-top:2px;font-weight:500}
+.prazo-alert{display:inline-flex;align-items:center;gap:6px;background:rgba(255,179,71,0.1);border:1px solid rgba(255,179,71,0.25);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--warn);margin-top:0.75rem}
+.progresso-barra{height:6px;background:var(--borda);border-radius:100px;overflow:hidden;margin-top:0.75rem}
+.progresso-fill{height:100%;background:var(--verde);border-radius:100px;transition:width 0.4s}
+
+.item-row{background:var(--card);border:1px solid var(--borda);border-radius:10px;padding:1rem;margin-bottom:8px;transition:border-color 0.2s}
+.item-row:hover{border-color:var(--verde-b)}
+.item-row.status-concluido{border-color:rgba(0,200,150,0.2);background:rgba(0,200,150,0.03)}
+.item-row.status-rejeitado{border-color:rgba(255,107,107,0.2)}
+.item-top{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:8px}
+.item-nome-row{font-size:14px;font-weight:500;color:var(--texto);margin-bottom:3px}
+.item-desc-row{font-size:12px;color:var(--sub)}
+.item-tags{display:flex;gap:5px;margin-top:6px;flex-wrap:wrap}
+.tag{font-size:10px;font-weight:500;padding:2px 8px;border-radius:100px}
+.tag-obrig{background:rgba(255,107,107,0.12);color:#FF8C8C;border:1px solid rgba(255,107,107,0.2)}
+.tag-esocial{background:var(--verde-dim);color:var(--verde);border:1px solid var(--verde-b)}
+.tag-digital{background:rgba(96,165,250,0.1);color:var(--info);border:1px solid rgba(96,165,250,0.2)}
+.item-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+
+/* upload area */
+.upload-area{border:1.5px dashed var(--borda);border-radius:8px;padding:1rem;text-align:center;cursor:pointer;transition:all 0.2s;position:relative;margin-top:8px}
+.upload-area:hover,.upload-area.drag{border-color:var(--verde-b);background:var(--verde-dim)}
+.upload-area input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.upload-label{font-size:12px;color:var(--sub)}
+.upload-label strong{color:var(--verde)}
+.attached-files{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+.file-item{display:flex;align-items:center;gap:8px;background:var(--card2);border:1px solid var(--borda);border-radius:6px;padding:6px 10px;font-size:12px}
+.file-name{flex:1;color:var(--texto);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-size{color:var(--sub);flex-shrink:0}
+.file-del{background:none;border:none;color:var(--sub);cursor:pointer;font-size:14px;flex-shrink:0;line-height:1}
+.file-del:hover{color:var(--danger)}
+
+/* observação analista */
+.analista-obs{background:var(--card2);border:1px solid var(--borda);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--sub);margin-top:8px;font-style:italic}
+
+/* ── TOAST ── */
+.toast-wrap{position:fixed;bottom:1.5rem;right:1.5rem;z-index:200;display:flex;flex-direction:column;gap:8px}
+.toast{background:var(--card);border:1px solid var(--borda);border-radius:10px;padding:10px 16px;font-size:13px;color:var(--texto);box-shadow:0 8px 24px rgba(0,0,0,0.4);animation:slideIn 0.25s ease;display:flex;align-items:center;gap:8px}
+.toast.success{border-color:var(--verde-b)}.toast.success::before{content:"✓";color:var(--verde);font-weight:700}
+.toast.error{border-color:rgba(255,107,107,0.3)}.toast.error::before{content:"!";color:var(--danger);font-weight:700}
+@keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── VAZIO ── */
+.empty{text-align:center;padding:3rem;color:var(--sub)}
+.empty-icon{font-size:2.5rem;margin-bottom:0.75rem}
+.empty-text{font-size:14px}
+
+/* ── LOADING ── */
+.loading-row td{text-align:center;padding:2rem;color:var(--sub)}
+
+@media(max-width:768px){
+  .shell{grid-template-columns:1fr}
+  .sidebar{display:none}
+  .form-row{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-title">Admissão<em>DP</em></div>
+      <div class="logo-sub">Gestão Multi-Tenant</div>
+    </div>
+    <nav class="nav">
+      <div class="nav-section">Principal</div>
+      <div class="nav-item active" onclick="showPage('dashboard')"><span class="nav-icon">📊</span>Dashboard</div>
+      <div class="nav-item" onclick="showPage('processos')"><span class="nav-icon">📋</span>Processos</div>
+      <div class="nav-section">Gestão</div>
+      <div class="nav-item" onclick="showPage('empresas')"><span class="nav-icon">🏢</span>Empresas</div>
+      <div class="nav-item" onclick="showPage('usuarios')"><span class="nav-icon">👥</span>Usuários</div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="tenant-info">Escritório ativo</div>
+      <div class="tenant-name">Escritório DP Demo</div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- DASHBOARD -->
+    <div id="page-dashboard" class="page active">
+      <div class="page-header">
+        <h1 class="page-title">Bem-vinda, <em>Ana</em></h1>
+        <button class="btn btn-primary btn-icon" onclick="abrirModalProcesso()">+ Novo processo</button>
+      </div>
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card"><div class="stat-val" id="stat-total">–</div><div class="stat-label">Processos ativos</div></div>
+        <div class="stat-card"><div class="stat-val" id="stat-pend">–</div><div class="stat-label">Documentos pendentes</div></div>
+        <div class="stat-card"><div class="stat-val" id="stat-venc">–</div><div class="stat-label">Vencem em 2 dias</div></div>
+        <div class="stat-card"><div class="stat-val" id="stat-concl">–</div><div class="stat-label">Concluídos este mês</div></div>
+      </div>
+      <div class="table-wrap">
+        <div class="table-head">
+          <span class="table-title">Processos recentes</span>
+          <button class="btn btn-ghost btn-sm" onclick="showPage('processos')">Ver todos</button>
+        </div>
+        <table><thead><tr>
+          <th>Candidato</th><th>Empresa</th><th>Cargo</th><th>Admissão</th><th>Prazo docs</th><th>Status</th><th></th>
+        </tr></thead>
+        <tbody id="tb-dashboard"><tr class="loading-row"><td colspan="7">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PROCESSOS -->
+    <div id="page-processos" class="page">
+      <div class="page-header">
+        <h1 class="page-title">Processos de <em>Admissão</em></h1>
+        <button class="btn btn-primary btn-icon" onclick="abrirModalProcesso()">+ Novo processo</button>
+      </div>
+      <div class="table-wrap">
+        <div class="table-head">
+          <span class="table-title">Todos os processos</span>
+          <div class="search-box">
+            <span>🔍</span>
+            <input type="text" placeholder="Buscar candidato..." id="search-processos" oninput="filtrarProcessos()">
+          </div>
+        </div>
+        <table><thead><tr>
+          <th>Candidato</th><th>Empresa</th><th>Contrato</th><th>Admissão</th><th>Prazo docs</th><th>Progresso</th><th>Status</th><th></th>
+        </tr></thead>
+        <tbody id="tb-processos"><tr class="loading-row"><td colspan="8">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- DETALHE DO PROCESSO -->
+    <div id="page-detalhe" class="page">
+      <div class="page-header">
+        <button class="btn btn-ghost btn-sm btn-icon" onclick="voltarProcessos()">← Voltar</button>
+        <button class="btn btn-primary btn-sm" onclick="salvarChecklist()">Salvar alterações</button>
+      </div>
+      <div class="processo-header" id="proc-header"></div>
+      <div id="checklist-wrap"></div>
+    </div>
+
+    <!-- EMPRESAS -->
+    <div id="page-empresas" class="page">
+      <div class="page-header">
+        <h1 class="page-title"><em>Empresas</em> clientes</h1>
+        <button class="btn btn-primary btn-icon" onclick="abrirModalEmpresa()">+ Nova empresa</button>
+      </div>
+      <div class="table-wrap">
+        <div class="table-head"><span class="table-title">Clientes cadastrados</span></div>
+        <table><thead><tr><th>Empresa</th><th>CNPJ</th><th>Contato</th><th>Status</th></tr></thead>
+        <tbody id="tb-empresas"><tr class="loading-row"><td colspan="4">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- USUÁRIOS -->
+    <div id="page-usuarios" class="page">
+      <div class="page-header">
+        <h1 class="page-title"><em>Usuários</em> do sistema</h1>
+      </div>
+      <div class="table-wrap">
+        <div class="table-head"><span class="table-title">Equipe</span></div>
+        <table><thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Status</th></tr></thead>
+        <tbody id="tb-usuarios"><tr class="loading-row"><td colspan="4">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- TOAST -->
+<div class="toast-wrap" id="toasts"></div>
+
+<!-- MODAL: NOVO PROCESSO -->
+<div class="modal-overlay" id="modal-processo">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Novo processo de admissão</div>
+      <button class="modal-close" onclick="fecharModal('modal-processo')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Nome completo do candidato *</label>
+          <input type="text" class="form-control" id="f-nome" placeholder="Ex: Maria Aparecida Silva">
+        </div>
+        <div class="form-group">
+          <label>CPF do candidato</label>
+          <input type="text" class="form-control" id="f-cpf" placeholder="000.000.000-00" oninput="mascaraCPF(this)">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>E-mail do candidato</label>
+        <input type="email" class="form-control" id="f-email" placeholder="candidato@email.com">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Cargo *</label>
+          <input type="text" class="form-control" id="f-cargo" placeholder="Ex: Analista Financeiro">
+        </div>
+        <div class="form-group">
+          <label>Departamento</label>
+          <input type="text" class="form-control" id="f-dept" placeholder="Ex: Financeiro">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Empresa *</label>
+          <select class="form-control" id="f-empresa"></select>
+        </div>
+        <div class="form-group">
+          <label>Tipo de contrato *</label>
+          <select class="form-control" id="f-contrato">
+            <option value="clt">CLT Efetivo</option>
+            <option value="temporario">Temporário</option>
+            <option value="estagio">Estágio</option>
+            <option value="aprendiz">Jovem Aprendiz</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Data de admissão *</label>
+        <input type="date" class="form-control" id="f-admissao" onchange="calcPrazo()">
+        <div class="form-hint" id="prazo-hint"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="fecharModal('modal-processo')">Cancelar</button>
+      <button class="btn btn-primary" onclick="criarProcesso()">Criar processo</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: NOVA EMPRESA -->
+<div class="modal-overlay" id="modal-empresa">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Nova empresa cliente</div>
+      <button class="modal-close" onclick="fecharModal('modal-empresa')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Razão social *</label>
+        <input type="text" class="form-control" id="fe-nome" placeholder="Ex: Empresa ABC Ltda">
+      </div>
+      <div class="form-group">
+        <label>CNPJ *</label>
+        <input type="text" class="form-control" id="fe-cnpj" placeholder="00.000.000/0001-00" oninput="mascaraCNPJ(this)">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Nome do contato</label>
+          <input type="text" class="form-control" id="fe-contato">
+        </div>
+        <div class="form-group">
+          <label>E-mail do contato</label>
+          <input type="email" class="form-control" id="fe-email">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="fecharModal('modal-empresa')">Cancelar</button>
+      <button class="btn btn-primary" onclick="criarEmpresa()">Cadastrar empresa</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: APROVAR/REJEITAR ITEM -->
+<div class="modal-overlay" id="modal-aprovacao">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="apr-titulo">Revisão do documento</div>
+      <button class="modal-close" onclick="fecharModal('modal-aprovacao')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Observação do analista (opcional)</label>
+        <textarea class="form-control" id="apr-obs" rows="3" placeholder="Ex: Documento legível e dentro da validade."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="fecharModal('modal-aprovacao')">Cancelar</button>
+      <button class="btn btn-danger btn-sm" onclick="decidirItem('rejeitado')">Rejeitar</button>
+      <button class="btn btn-primary" onclick="decidirItem('concluido')">Aprovar documento</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SB_URL='https://klqdbjhpcnjurvdzrvvl.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtscWRiamhwY25qdXJ2ZHpydnZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4NzQzMzgsImV4cCI6MjA5MzQ1MDMzOH0.hAypmiPfXdcRQ_gCbvZOGQlF3qXtD6G_G-bdporrHng';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+
+const ESCRITORIO_ID='a1000000-0000-0000-0000-000000000001';
+const ANALISTA_ID='b1000000-0000-0000-0000-000000000001';
+
+let processos=[],empresas=[],itemAprovacaoId=null,processoAtual=null;
+
+// ── CHECKLIST TEMPLATES ──
+const TEMPLATES={
+  clt:[
+    {nome:'RG ou CNH',descricao:'Documento oficial com foto válido.',responsavel:'candidato',obrigatorio:true,tags:['obrigatorio','esocial']},
+    {nome:'CPF',descricao:'Validar situação na Receita Federal.',responsavel:'candidato',obrigatorio:true,tags:['obrigatorio','esocial']},
+    {nome:'Comprovante de residência',descricao:'Até 90 dias de emissão.',responsavel:'candidato',obrigatorio:true,tags:['obrigatorio']},
+    {nome:'Carteira de Trabalho (CTPS)',descricao:'Física ou digital. Necessária para anotação da admissão.',responsavel:'candidato',obrigatorio:true,tags:['obrigatorio','esocial']},
+    {nome:'PIS/PASEP',descricao:'Verificar se já possui cadastro.',responsavel:'candidato',obrigatorio:true,tags:['obrigatorio','esocial']},
+    {nome:'ASO — Atestado de Saúde Ocupacional',descricao:'Exame admissional obrigatório. Antes do início.',responsavel:'empresa',obrigatorio:true,tags:['obrigatorio']},
+    {nome:'Contrato de trabalho assinado',descricao:'Duas vias. Colaborador assina e fica com uma cópia.',responsavel:'analista',obrigatorio:true,tags:['obrigatorio']},
+    {nome:'Declaração de vale-transporte',descricao:'Aceite ou recusa do benefício, assinada.',responsavel:'candidato',obrigatorio:true,tags:['obrigatorio']},
+    {nome:'Admissão no eSocial (S-2200)',descricao:'Envio até 1 dia antes do início.',responsavel:'analista',obrigatorio:true,tags:['obrigatorio','esocial']},
+    {nome:'Dados bancários',descricao:'Banco, agência e conta para depósito de salário.',responsavel:'candidato',obrigatorio:true,tags:['obrigatorio']},
+  ],
+  temporario:[
+    {nome:'RG ou CNH',descricao:'Documento oficial com foto.',responsavel:'candidato',obrigatorio:true,tags:['obrigatorio','esocial']},
+    {nome:'CPF',descricao:'Validar na Receita Federal.',responsavel:'candidato',obrigatorio:true,tags:['obrigatorio','esocial']},
+    {nome:'Contrato temporário assinado',descricao:'Especificar motivo, prazo e possibilidade de prorrogação.',responsavel:'analista',obrigatorio:true,tags:['obrigatorio']},
+    {nome:'CTPS — anotação de contrato temporário',descricao:'A natureza temporária deve constar na CTPS.',responsavel:'analista',obrigatorio:true,tags:['obrigatorio','esocial']},
+    {nome:'ASO Admissional',descricao:'Obrigatório mesmo para contratos temporários.',responsavel:'empresa',obrigatorio:true,tags:['obrigatorio']},
+    {nome:'Admissão no eSocial (S-2200)',descricao:'Envio até 1 dia antes do início.',responsavel:'analista',obrigatorio:true,tags:['obrigatorio','esocial']},
+  ],
+  estagio:[
+    {nome:'RG ou CNH',descricao:'Documento oficial com foto.',responsavel:'candidato',obrigatorio:true,tags:['obrigatorio']},
+    {nome:'CPF',descricao:'Obrigatório para TRCT ao término.',responsavel:'candidato',obrigatorio:true,tags:['obrigatorio']},
+    {nome:'Comprovante de matrícula atualizado',descricao:'Renovar a cada semestre.',responsavel:'candidato',obrigatorio:true,tags:['obrigatorio']},
+    {nome:'Termo de Compromisso de Estágio (TCE)',descricao:'Assinado pela empresa, IE e estagiário. Lei 11.788/08.',responsavel:'analista',obrigatorio:true,tags:['obrigatorio']},
+    {nome:'Apólice de seguro de acidentes pessoais',descricao:'Obrigatório por lei.',responsavel:'empresa',obrigatorio:true,tags:['obrigatorio']},
+  ],
+  aprendiz:[
+    {nome:'RG ou Certidão de nascimento',descricao:'Para menores de 18 aceita certidão.',responsavel:'candidato',obrigatorio:true,tags:['obrigatorio','esocial']},
+    {nome:'CPF',descricao:'Menores podem ter CPF emitido pelos pais.',responsavel:'candidato',obrigatorio:true,tags:['obrigatorio','esocial']},
+    {nome:'Autorização dos pais ou responsável',descricao:'Obrigatória para menores de 18 anos.',responsavel:'candidato',obrigatorio:true,tags:['obrigatorio']},
+    {nome:'Contrato de aprendizagem assinado',descricao:'Por prazo determinado. Máximo 2 anos.',responsavel:'analista',obrigatorio:true,tags:['obrigatorio']},
+    {nome:'Matrícula na entidade qualificadora',descricao:'SENAI, SENAC, SENAR ou entidade habilitada.',responsavel:'candidato',obrigatorio:true,tags:['obrigatorio']},
+    {nome:'ASO Admissional',descricao:'Atenção às restrições de trabalho para menores.',responsavel:'empresa',obrigatorio:true,tags:['obrigatorio']},
+    {nome:'Admissão no eSocial (S-2200)',descricao:'Informar natureza de aprendiz.',responsavel:'analista',obrigatorio:true,tags:['obrigatorio','esocial']},
+  ]
+};
+
+// ── UTILS ──
+function toast(msg,type='success'){
+  const w=document.getElementById('toasts');
+  const t=document.createElement('div');
+  t.className=`toast ${type}`;t.textContent=msg;
+  w.appendChild(t);setTimeout(()=>t.remove(),3500);
+}
+function fmtData(d){if(!d)return'–';const[a,m,dia]=d.split('-');return`${dia}/${m}/${a}`}
+function fmtContrato(c){return{clt:'CLT',temporario:'Temporário',estagio:'Estágio',aprendiz:'Aprendiz'}[c]||c}
+function diasRestantes(prazo){const d=new Date(prazo+'T12:00:00');const h=new Date();const diff=Math.ceil((d-h)/86400000);return diff}
+function mascaraCPF(el){let v=el.value.replace(/\D/g,'').slice(0,11);v=v.replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d{1,2})$/,'$1-$2');el.value=v}
+function mascaraCNPJ(el){let v=el.value.replace(/\D/g,'').slice(0,14);v=v.replace(/(\d{2})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1/$2').replace(/(\d{4})(\d{1,2})$/,'$1-$2');el.value=v}
+
+function badgeStatus(s){
+  const m={pendente:['badge-pend','Pendente'],em_andamento:['badge-and','Em andamento'],concluido:['badge-ok','Concluído'],rejeitado:['badge-rej','Rejeitado'],em_andamento_proc:['badge-and','Em andamento'],concluido_proc:['badge-ok','Concluído'],cancelado:['badge-rej','Cancelado']};
+  const[cls,label]=m[s]||['badge-pend',s];
+  return`<span class="badge ${cls}">${label}</span>`;
+}
+function calcProgresso(itens){
+  if(!itens||!itens.length)return 0;
+  const ok=itens.filter(i=>i.status==='concluido').length;
+  return Math.round((ok/itens.length)*100);
+}
+
+// ── NAVEGAÇÃO ──
+function showPage(p){
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));
+  document.getElementById('page-'+p).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(x=>{if(x.textContent.toLowerCase().includes(p.slice(0,4)))x.classList.add('active')});
+  if(p==='dashboard')carregarDashboard();
+  if(p==='processos')carregarProcessos();
+  if(p==='empresas')carregarEmpresas();
+  if(p==='usuarios')carregarUsuarios();
+}
+function voltarProcessos(){showPage('processos')}
+
+// ── MODAIS ──
+function abrirModalProcesso(){
+  carregarEmpresasSelect();
+  document.getElementById('prazo-hint').textContent='';
+  ['f-nome','f-cpf','f-email','f-cargo','f-dept','f-admissao'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=''});
+  document.getElementById('modal-processo').classList.add('open');
+}
+function abrirModalEmpresa(){
+  ['fe-nome','fe-cnpj','fe-contato','fe-email'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=''});
+  document.getElementById('modal-empresa').classList.add('open');
+}
+function fecharModal(id){document.getElementById(id).classList.remove('open')}
+document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open')}));
+
+function calcPrazo(){
+  const d=document.getElementById('f-admissao').value;
+  if(!d)return;
+  const prazo=new Date(d+'T12:00:00');prazo.setDate(prazo.getDate()-2);
+  const dd=String(prazo.getDate()).padStart(2,'0');
+  const mm=String(prazo.getMonth()+1).padStart(2,'0');
+  document.getElementById('prazo-hint').textContent=`⚡ Prazo automático para documentação: ${dd}/${mm}/${prazo.getFullYear()}`;
+}
+
+// ── EMPRESAS SELECT ──
+async function carregarEmpresasSelect(){
+  const{data}=await sb.from('empresas').select('id,nome').eq('escritorio_id',ESCRITORIO_ID).eq('ativo',true);
+  const sel=document.getElementById('f-empresa');
+  sel.innerHTML=(data||[]).map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
+}
+
+// ── DASHBOARD ──
+async function carregarDashboard(){
+  const{data:procs}=await sb.from('processos').select('*,empresas(nome),checklist_itens(status)').eq('escritorio_id',ESCRITORIO_ID).eq('status','em_andamento').order('created_at',{ascending:false}).limit(6);
+  processos=procs||[];
+
+  const hoje=new Date();
+  let pend=0,venc=0;
+  processos.forEach(p=>{
+    (p.checklist_itens||[]).forEach(i=>{if(i.status!=='concluido')pend++;});
+    const dr=diasRestantes(p.prazo_documentos);if(dr>=0&&dr<=2)venc++;
+  });
+  const{count:concl}=await sb.from('processos').select('*',{count:'exact',head:true}).eq('escritorio_id',ESCRITORIO_ID).eq('status','concluido').gte('created_at',new Date(hoje.getFullYear(),hoje.getMonth(),1).toISOString());
+
+  document.getElementById('stat-total').textContent=processos.length;
+  document.getElementById('stat-pend').textContent=pend;
+  document.getElementById('stat-venc').textContent=venc;
+  document.getElementById('stat-concl').textContent=concl||0;
+
+  const tb=document.getElementById('tb-dashboard');
+  if(!processos.length){tb.innerHTML=`<tr><td colspan="7"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Nenhum processo ativo</div></div></td></tr>`;return;}
+  tb.innerHTML=processos.map(p=>{
+    const dr=diasRestantes(p.prazo_documentos);
+    const prazoClass=dr<0?'style="color:var(--danger)"':dr<=2?'style="color:var(--warn)"':'';
+    return`<tr>
+      <td><div class="td-nome">${p.candidato_nome}</div><div class="td-sub">${p.candidato_email||''}</div></td>
+      <td>${p.empresas?.nome||'–'}</td>
+      <td>${p.cargo}</td>
+      <td>${fmtData(p.data_admissao)}</td>
+      <td ${prazoClass}>${fmtData(p.prazo_documentos)}</td>
+      <td>${badgeStatus(p.status)}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="abrirDetalhe('${p.id}')">Abrir</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── PROCESSOS ──
+async function carregarProcessos(){
+  const{data}=await sb.from('processos').select('*,empresas(nome),checklist_itens(status)').eq('escritorio_id',ESCRITORIO_ID).order('created_at',{ascending:false});
+  processos=data||[];renderProcessos();
+}
+function renderProcessos(){
+  const q=(document.getElementById('search-processos')?.value||'').toLowerCase();
+  const lista=q?processos.filter(p=>p.candidato_nome.toLowerCase().includes(q)):processos;
+  const tb=document.getElementById('tb-processos');
+  if(!lista.length){tb.innerHTML=`<tr><td colspan="8"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Nenhum processo encontrado</div></div></td></tr>`;return;}
+  tb.innerHTML=lista.map(p=>{
+    const pct=calcProgresso(p.checklist_itens);
+    const dr=diasRestantes(p.prazo_documentos);
+    const prazoClass=dr<0?'style="color:var(--danger)"':dr<=2?'style="color:var(--warn)"':'';
+    return`<tr>
+      <td><div class="td-nome">${p.candidato_nome}</div><div class="td-sub">${p.cargo}</div></td>
+      <td>${p.empresas?.nome||'–'}</td>
+      <td>${fmtContrato(p.tipo_contrato)}</td>
+      <td>${fmtData(p.data_admissao)}</td>
+      <td ${prazoClass}>${fmtData(p.prazo_documentos)}</td>
+      <td><div style="display:flex;align-items:center;gap:8px"><div class="progresso-barra" style="width:80px;margin:0"><div class="progresso-fill" style="width:${pct}%"></div></div><span style="font-size:12px;color:var(--sub)">${pct}%</span></div></td>
+      <td>${badgeStatus(p.status)}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="abrirDetalhe('${p.id}')">Abrir</button></td>
+    </tr>`;
+  }).join('');
+}
+function filtrarProcessos(){renderProcessos()}
+
+// ── DETALHE DO PROCESSO ──
+async function abrirDetalhe(id){
+  const{data:proc}=await sb.from('processos').select('*,empresas(nome),checklist_itens(*,anexos(*))').eq('id',id).single();
+  processoAtual=proc;
+
+  // Header
+  const dr=diasRestantes(proc.prazo_documentos);
+  const pct=calcProgresso(proc.checklist_itens);
+  document.getElementById('proc-header').innerHTML=`
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+      <div>
+        <div style="font-family:var(--serif);font-size:1.4rem;font-weight:300">${proc.candidato_nome}</div>
+        <div style="font-size:13px;color:var(--sub);margin-top:2px">${proc.cargo} · ${proc.empresas?.nome||''} · ${fmtContrato(proc.tipo_contrato)}</div>
+      </div>
+      ${badgeStatus(proc.status)}
+    </div>
+    <div class="ph-grid">
+      <div class="ph-item"><div class="ph-label">Data de admissão</div><div class="ph-val">${fmtData(proc.data_admissao)}</div></div>
+      <div class="ph-item"><div class="ph-label">Prazo documentos</div><div class="ph-val" style="${dr<0?'color:var(--danger)':dr<=2?'color:var(--warn)':''}">${fmtData(proc.prazo_documentos)}</div></div>
+      <div class="ph-item"><div class="ph-label">E-mail candidato</div><div class="ph-val">${proc.candidato_email||'–'}</div></div>
+      <div class="ph-item"><div class="ph-label">CPF</div><div class="ph-val">${proc.candidato_cpf||'–'}</div></div>
+    </div>
+    ${dr<=2&&dr>=0?`<div class="prazo-alert">⚠️ Prazo vence em ${dr===0?'hoje':dr+' dia(s)'}. Verifique os documentos pendentes.</div>`:''}
+    <div style="margin-top:0.75rem;display:flex;align-items:center;gap:10px">
+      <div style="font-size:12px;color:var(--sub)">Progresso geral: <strong style="color:var(--texto)">${pct}%</strong></div>
+    </div>
+    <div class="progresso-barra"><div class="progresso-fill" style="width:${pct}%"></div></div>
+  `;
+
+  // Checklist
+  renderChecklistDetalhe(proc.checklist_itens||[]);
+
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+  document.getElementById('page-detalhe').classList.add('active');
+}
+
+function renderChecklistDetalhe(itens){
+  const wrap=document.getElementById('checklist-wrap');
+  if(!itens.length){wrap.innerHTML=`<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Nenhum item no checklist</div></div>`;return;}
+  wrap.innerHTML=itens.sort((a,b)=>a.ordem-b.ordem).map(item=>{
+    const anexos=item.anexos||[];
+    const tagsHtml=(item.tags||[]).map(t=>{
+      const cls={obrigatorio:'tag-obrig',esocial:'tag-esocial',digital:'tag-digital'}[t]||'';
+      const label={obrigatorio:'Obrigatório',esocial:'eSocial',digital:'Digital'}[t]||t;
+      return cls?`<span class="tag ${cls}">${label}</span>`:'';
+    }).join('');
+
+    const podeAprovar=item.status==='em_andamento'&&anexos.length>0;
+    const botaoAprovar=podeAprovar?`<button class="btn btn-primary btn-sm" onclick="abrirAprovacao('${item.id}','${item.nome.replace(/'/g,"\\'")}')">Revisar</button>`:'';
+    const obsHtml=item.observacao_analista?`<div class="analista-obs">💬 Analista: ${item.observacao_analista}</div>`:'';
+
+    const arquivosHtml=anexos.map(a=>`
+      <div class="file-item">
+        <span>📄</span>
+        <span class="file-name">${a.nome_arquivo}</span>
+        <span class="file-size">${a.tamanho_bytes?Math.round(a.tamanho_bytes/1024)+'KB':''}</span>
+        <button class="file-del" onclick="visualizarArquivo('${a.storage_path}')" title="Visualizar">👁</button>
+      </div>`).join('');
+
+    return`<div class="item-row status-${item.status}" id="item-${item.id}">
+      <div class="item-top">
+        <div>
+          <div class="item-nome-row">${item.nome}</div>
+          <div class="item-desc-row">${item.descricao||''}</div>
+          <div class="item-tags">${tagsHtml}</div>
+        </div>
+        <div class="item-actions">
+          ${badgeStatus(item.status)}
+          ${botaoAprovar}
+        </div>
+      </div>
+      ${obsHtml}
+      ${arquivosHtml?`<div class="attached-files">${arquivosHtml}</div>`:''}
+      ${item.status==='pendente'||item.status==='em_andamento'?`
+        <div class="upload-area" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event,'${item.id}')">
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="handleUpload(event,'${item.id}')">
+          <div class="upload-label">📎 <strong>Clique ou arraste</strong> para anexar (PDF, JPG, PNG, DOC · máx 5MB)</div>
+        </div>`:''}
+    </div>`;
+  }).join('');
+}
+
+// ── UPLOAD REAL — Edge Function + Supabase Storage ──
+const EDGE_URL='https://klqdbjhpcnjurvdzrvvl.supabase.co/functions/v1/upload-documento';
+
+async function handleUpload(event,itemId){
+  const file=event.target.files[0];
+  if(!file)return;
+
+  const ALLOWED=['application/pdf','image/jpeg','image/png','image/webp','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+  if(!ALLOWED.includes(file.type)){toast('Tipo não permitido. Use PDF, JPG, PNG ou DOC.','error');return;}
+  if(file.size>5*1024*1024){toast('Arquivo muito grande. Máximo 5MB.','error');return;}
+
+  const{data:proc}=await sb.from('checklist_itens').select('processo_id').eq('id',itemId).single();
+  if(!proc){toast('Erro ao localizar processo.','error');return;}
+
+  // Mostra loading no botão da área de upload
+  const uploadArea=document.querySelector(`#item-${itemId} .upload-area`);
+  if(uploadArea){uploadArea.querySelector('.upload-label').textContent='⏳ Enviando...';}
+
+  const form=new FormData();
+  form.append('file',file);
+  form.append('item_id',itemId);
+  form.append('processo_id',proc.processo_id);
+  form.append('escritorio_id',ESCRITORIO_ID);
+  form.append('analista_id',ANALISTA_ID);
+
+  try{
+    const resp=await fetch(EDGE_URL,{method:'POST',body:form});
+    const json=await resp.json();
+
+    if(!resp.ok||json.error){
+      toast(json.error||'Erro no upload.','error');
+      if(uploadArea){uploadArea.querySelector('.upload-label').innerHTML='📎 <strong>Clique ou arraste</strong> para anexar (PDF, JPG, PNG, DOC · máx 5MB)';}
+      return;
+    }
+
+    toast(json.mensagem||`"${file.name}" enviado!`);
+    await abrirDetalhe(proc.processo_id);
+  }catch(e){
+    console.error(e);
+    toast('Erro de conexão com o servidor.','error');
+    if(uploadArea){uploadArea.querySelector('.upload-label').innerHTML='📎 <strong>Clique ou arraste</strong> para anexar (PDF, JPG, PNG, DOC · máx 5MB)';}
+  }
+}
+
+async function handleDrop(event,itemId){
+  event.preventDefault();event.currentTarget.classList.remove('drag');
+  const file=event.dataTransfer.files[0];
+  if(file){const fakeEvent={target:{files:[file]}};await handleUpload(fakeEvent,itemId);}
+}
+
+// ── APROVAÇÃO ──
+function abrirAprovacao(itemId,nome){
+  itemAprovacaoId=itemId;
+  document.getElementById('apr-titulo').textContent=`Revisar: ${nome}`;
+  document.getElementById('apr-obs').value='';
+  document.getElementById('modal-aprovacao').classList.add('open');
+}
+
+async function decidirItem(decisao){
+  const obs=document.getElementById('apr-obs').value;
+  const{error}=await sb.from('checklist_itens').update({
+    status:decisao,
+    aprovado_por:ANALISTA_ID,
+    aprovado_em:new Date().toISOString(),
+    observacao_analista:obs||null
+  }).eq('id',itemAprovacaoId);
+
+  fecharModal('modal-aprovacao');
+  if(error){toast('Erro ao salvar decisão.','error');return;}
+  toast(decisao==='concluido'?'Documento aprovado!':'Documento rejeitado.');
+  await abrirDetalhe(processoAtual.id);
+}
+
+// ── CRIAR PROCESSO ──
+async function criarProcesso(){
+  const nome=document.getElementById('f-nome').value.trim();
+  const cargo=document.getElementById('f-cargo').value.trim();
+  const empresa=document.getElementById('f-empresa').value;
+  const admissao=document.getElementById('f-admissao').value;
+  const contrato=document.getElementById('f-contrato').value;
+
+  if(!nome||!cargo||!empresa||!admissao){toast('Preencha os campos obrigatórios.','error');return;}
+
+  const{data:proc,error}=await sb.from('processos').insert({
+    escritorio_id:ESCRITORIO_ID,
+    empresa_id:empresa,
+    candidato_nome:nome,
+    candidato_email:document.getElementById('f-email').value||null,
+    candidato_cpf:document.getElementById('f-cpf').value||null,
+    cargo,
+    departamento:document.getElementById('f-dept').value||null,
+    tipo_contrato:contrato,
+    data_admissao:admissao,
+    analista_id:ANALISTA_ID
+  }).select().single();
+
+  if(error){toast('Erro ao criar processo.','error');console.error(error);return;}
+
+  // Inserir itens do checklist pelo template
+  const template=TEMPLATES[contrato]||TEMPLATES.clt;
+  const prazo=new Date(admissao+'T12:00:00');prazo.setDate(prazo.getDate()-2);
+  const prazoStr=prazo.toISOString().split('T')[0];
+
+  await sb.from('checklist_itens').insert(
+    template.map((t,i)=>({...t,processo_id:proc.id,prazo:prazoStr,ordem:i}))
+  );
+
+  fecharModal('modal-processo');
+  toast(`Processo de ${nome} criado com ${template.length} itens no checklist!`);
+  await abrirDetalhe(proc.id);
+}
+
+// ── SALVAR CHECKLIST ──
+async function salvarChecklist(){toast('Alterações salvas automaticamente!');await abrirDetalhe(processoAtual.id);}
+
+// ── EMPRESAS ──
+async function carregarEmpresas(){
+  const{data}=await sb.from('empresas').select('*').eq('escritorio_id',ESCRITORIO_ID).order('nome');
+  const tb=document.getElementById('tb-empresas');
+  if(!data?.length){tb.innerHTML=`<tr><td colspan="4"><div class="empty"><div class="empty-icon">🏢</div><div class="empty-text">Nenhuma empresa cadastrada</div></div></td></tr>`;return;}
+  tb.innerHTML=data.map(e=>`<tr>
+    <td><div class="td-nome">${e.nome}</div></td>
+    <td>${e.cnpj}</td>
+    <td><div class="td-nome">${e.contato_nome||'–'}</div><div class="td-sub">${e.contato_email||''}</div></td>
+    <td>${badgeStatus(e.ativo?'concluido':'rejeitado')}</td>
+  </tr>`).join('');
+}
+
+async function criarEmpresa(){
+  const nome=document.getElementById('fe-nome').value.trim();
+  const cnpj=document.getElementById('fe-cnpj').value.trim();
+  if(!nome||!cnpj){toast('Nome e CNPJ são obrigatórios.','error');return;}
+  const{error}=await sb.from('empresas').insert({escritorio_id:ESCRITORIO_ID,nome,cnpj,contato_nome:document.getElementById('fe-contato').value||null,contato_email:document.getElementById('fe-email').value||null});
+  if(error){toast('Erro ao cadastrar empresa.','error');return;}
+  fecharModal('modal-empresa');toast('Empresa cadastrada!');carregarEmpresas();
+}
+
+// ── USUÁRIOS ──
+async function carregarUsuarios(){
+  const{data}=await sb.from('usuarios').select('*').eq('escritorio_id',ESCRITORIO_ID);
+  const tb=document.getElementById('tb-usuarios');
+  if(!data?.length){tb.innerHTML=`<tr><td colspan="4"><div class="empty"><div class="empty-text">Nenhum usuário</div></div></td></tr>`;return;}
+  const papeis={admin:'Admin',analista:'Analista',candidato:'Candidato'};
+  tb.innerHTML=data.map(u=>`<tr>
+    <td><div class="td-nome">${u.nome}</div></td>
+    <td>${u.email}</td>
+    <td>${papeis[u.papel]||u.papel}</td>
+    <td>${badgeStatus(u.ativo?'concluido':'rejeitado')}</td>
+  </tr>`).join('');
+}
+
+// ── VISUALIZAR ARQUIVO (URL assinada) ──
+async function visualizarArquivo(path){
+  const{data,error}=await sb.storage.from('documentos').createSignedUrl(path,3600);
+  if(error||!data?.signedUrl){toast('Não foi possível gerar o link de visualização.','error');return;}
+  window.open(data.signedUrl,'_blank');
+}
+
+// ── INIT ──
+carregarDashboard();
+</script>
+</body>
+</html>
