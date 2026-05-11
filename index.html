@@ -194,16 +194,12 @@ tr:hover td{background:var(--card2)}
       <input type="text" class="form-control" id="reg-nome" placeholder="Ex: Ana Oliveira">
     </div>
     <div class="form-group">
-      <label>Nome do escritório / empresa</label>
-      <input type="text" class="form-control" id="reg-escritorio" placeholder="Ex: Escritório DP São Paulo">
-    </div>
-    <div class="form-group">
-      <label>CNPJ do escritório</label>
-      <input type="text" class="form-control" id="reg-cnpj" placeholder="00.000.000/0001-00" oninput="mascaraCNPJ(this)">
-    </div>
-    <div class="form-group">
       <label>E-mail</label>
       <input type="email" class="form-control" id="reg-email" placeholder="seu@email.com">
+    </div>
+    <div class="form-group">
+      <label>Celular (WhatsApp)</label>
+      <input type="tel" class="form-control" id="reg-tel" placeholder="(11) 99999-9999" oninput="mascaraTel(this)">
     </div>
     <div class="form-group">
       <label>Crie sua senha</label>
@@ -395,6 +391,12 @@ function showAlert(id,msg,type='error'){
   el.className=`alert ${type} show`;el.textContent=msg;
 }
 function hideAlert(id){document.getElementById(id).className='alert'}
+function mascaraTel(el){
+  let v=el.value.replace(/\D/g,'').slice(0,11);
+  if(v.length<=10)v=v.replace(/(\d{2})(\d{4})(\d{0,4})/,'($1) $2-$3');
+  else v=v.replace(/(\d{2})(\d{5})(\d{0,4})/,'($1) $2-$3');
+  el.value=v;
+}
 function mascaraCNPJ(el){let v=el.value.replace(/\D/g,'').slice(0,14);v=v.replace(/(\d{2})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1/$2').replace(/(\d{4})(\d{1,2})$/,'$1-$2');el.value=v}
 function toggleSenha(id,btn){const el=document.getElementById(id);el.type=el.type==='password'?'text':'password';btn.textContent=el.type==='password'?'👁':'🙈'}
 function fmtData(d){if(!d)return'–';const[a,m,dia]=d.split('-');return`${dia}/${m}/${a}`}
@@ -444,31 +446,30 @@ async function fazerLogin(){
 
 async function criarConta(){
   const nome=document.getElementById('reg-nome').value.trim();
-  const escritorio=document.getElementById('reg-escritorio').value.trim();
-  const cnpj=document.getElementById('reg-cnpj').value.trim();
   const email=document.getElementById('reg-email').value.trim();
+  const tel=document.getElementById('reg-tel').value.trim();
   const senha=document.getElementById('reg-senha').value;
-  if(!nome||!escritorio||!cnpj||!email||!senha){showAlert('reg-alert','Preencha todos os campos.');return}
+  if(!nome||!email||!tel||!senha){showAlert('reg-alert','Preencha todos os campos.');return}
   if(senha.length<8){showAlert('reg-alert','A senha deve ter no mínimo 8 caracteres.');return}
 
   const btn=document.getElementById('reg-btn');
   btn.disabled=true;btn.textContent='Criando conta...';
 
-  // Cria usuário no Supabase Auth
   const{data:authData,error:authErr}=await sb.auth.signUp({
-    email,password:senha,
-    options:{data:{nome}}
+    email,password:senha,options:{data:{nome}}
   });
-  if(authErr){showAlert('reg-alert',authErr.message);btn.disabled=false;btn.textContent='Criar conta e entrar';return}
+  if(authErr){
+    const msg=authErr.message==='User already registered'?'E-mail já cadastrado. Faça login.':authErr.message;
+    showAlert('reg-alert',msg);btn.disabled=false;btn.textContent='Criar conta e entrar';return;
+  }
 
-  // 3. Cria escritório
-  const{data:esc,error:escErr}=await sb.from('escritorios').insert({
-    nome:escritorio,cnpj,email_contato:email
+  const{data:esc}=await sb.from('escritorios').insert({
+    nome:'Meu Escritório',cnpj:'00.000.000/0001-00',email_contato:email
   }).select().single();
-  if(escErr){showAlert('reg-alert','Erro ao criar escritório.');btn.disabled=false;btn.textContent='Criar conta e entrar';return}
 
-  // 4. Atualiza perfil com escritório e papel admin
-  await sb.from('perfis').update({escritorio_id:esc.id,nome,papel:'admin'}).eq('id',authData.user.id);
+  await sb.from('perfis').update({
+    escritorio_id:esc?.id||null,nome,telefone:tel,papel:'admin'
+  }).eq('id',authData.user.id);
 
   await carregarPerfil();
   showScreen('screen-app');
